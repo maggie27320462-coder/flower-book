@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>全花卉圖鑑與好友花冊</title>
+  <script src="https://tailwindcss.com"></script>
+  <style>
+    .sticky-col { position: sticky; left: 0; z-index: 10; background-color: white; }
+    .sticky-header { position: sticky; top: 0; z-index: 20; }
+    .sticky-corner { position: sticky; left: 0; top: 0; z-index: 30; }
+  </style>
+</head>
+<body class="bg-pink-50/40 text-gray-800 min-h-screen font-sans">
+
+  <!-- 頂部導覽列 -->
+  <nav class="bg-white shadow-sm border-b border-pink-100 sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="flex justify-between items-center h-14">
+        <span class="font-bold text-lg text-pink-600 flex items-center gap-2">
+          🌸 全花卉圖鑑管理
+        </span>
+        <div class="flex space-x-1 sm:space-x-2">
+          <button onclick="switchTab('upload')" id="tab-upload" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium bg-pink-600 text-white">截圖更新</button>
+          <button onclick="switchTab('search')" id="tab-search" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-pink-50">搜花與總表</button>
+          <button onclick="switchTab('friend')" id="tab-friend" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-pink-50">好友花冊</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 載入中遮罩 -->
+  <div id="loading" class="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center hidden">
+    <div class="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-3">
+      <div class="w-10 h-10 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+      <p id="loading-text" class="text-gray-700 font-medium">資料處理中，請稍候...</p>
+    </div>
+  </div>
+
+  <main class="max-w-6xl mx-auto p-4 pb-20">
+
+    <!-- 分頁 1：截圖辨識與更新 -->
+    <section id="view-upload" class="space-y-6">
+      <div class="bg-white p-5 rounded-2xl shadow-xs border border-pink-100 space-y-4">
+        <h2 class="text-lg font-bold text-gray-800 border-l-4 border-pink-500 pl-3">1. 選擇或新增好友</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-1">選擇現有好友</label>
+            <select id="select-friend" onchange="toggleNewFriendInput()" class="w-full border border-gray-300 rounded-xl p-2.5 bg-white focus:ring-2 focus:ring-pink-400 focus:outline-none">
+              <option value="">-- 請選擇好友 --</option>
+              <option value="__NEW__">➕ 新增好友...</option>
+            </select>
+          </div>
+          <div id="new-friend-box" class="hidden">
+            <label class="block text-sm font-medium text-gray-600 mb-1">輸入新好友名稱</label>
+            <input type="text" id="input-new-friend" placeholder="請輸入遊戲暱稱" class="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-pink-400 focus:outline-none">
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white p-5 rounded-2xl shadow-xs border border-pink-100 space-y-4">
+        <h2 class="text-lg font-bold text-gray-800 border-l-4 border-pink-500 pl-3">2. 上傳圖鑑截圖</h2>
+        <div class="flex flex-col sm:flex-row items-center gap-4">
+          <input type="file" id="image-input" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100">
+          <button onclick="analyzeImage()" class="w-full sm:w-auto shrink-0 bg-pink-600 hover:bg-pink-700 text-white font-medium px-6 py-2.5 rounded-xl shadow-xs transition">
+            🔍 開始辨識花名
+          </button>
+        </div>
+        <img id="image-preview" class="max-h-60 rounded-xl hidden border border-gray-200 object-contain">
+      </div>
+
+      <!-- 人工確認與修正區塊 -->
+      <div id="confirm-section" class="bg-white p-5 rounded-2xl shadow-xs border border-pink-100 space-y-4 hidden">
+        <div class="flex flex-wrap justify-between items-center gap-2">
+          <h2 class="text-lg font-bold text-gray-800 border-l-4 border-amber-500 pl-3">3. 確認與修正花名（請核對後再寫入）</h2>
+          <button onclick="addEmptyRow()" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium">
+            ➕ 手動補一朵花
+          </button>
+        </div>
+        <p class="text-sm text-gray-500">若 AI 辨識有誤，可直接點擊下方文字框修改花名或品項；標示「✨ 新花」代表總表尚未收錄。</p>
+        
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-gray-50 text-gray-600 text-sm border-b">
+                <th class="p-3">狀態</th>
+                <th class="p-3">花名（可直接修改）</th>
+                <th class="p-3">品項</th>
+                <th class="p-3 text-center">操作</th>
+              </tr>
+            </thead>
+            <tbody id="detected-list" class="divide-y divide-gray-100"></tbody>
+          </table>
+        </div>
+
+        <div class="pt-2 flex justify-end">
+          <button onclick="submitUpdates()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3 rounded-xl shadow-sm transition">
+            ✅ 確認無誤，寫入試算表
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 分頁 2：搜花與總表 -->
+    <section id="view-search" class="space-y-4 hidden">
+      <div class="bg-white p-4 rounded-2xl shadow-xs border border-pink-100 flex flex-col sm:flex-row gap-3">
+        <input type="text" id="search-input" oninput="renderMainTable()" placeholder="🔎 輸入花名關鍵字（例如：餅、月、靈鹿）..." class="flex-1 border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-pink-400 focus:outline-none">
+        <select id="filter-grade" onchange="renderMainTable()" class="border border-gray-300 rounded-xl p-2.5 bg-white">
+          <option value="ALL">全部品項</option>
+          <option value="仙品">仙品</option>
+          <option value="華品">華品</option>
+        </select>
+        <button onclick="fetchSheetData()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-medium shrink-0">
+          🔄 重新整理資料
+        </button>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-xs border border-pink-100 overflow-hidden">
+        <div class="overflow-x-auto max-h-[70vh]">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead class="bg-pink-50 text-pink-900 sticky-header">
+              <tr id="main-table-head"></tr>
+            </thead>
+            <tbody id="main-table-body" class="divide-y divide-gray-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 分頁 3：好友個人花冊 -->
+    <section id="view-friend" class="space-y-4 hidden">
+      <div class="bg-white p-4 rounded-2xl shadow-xs border border-pink-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-3 w-full sm:w-auto">
+          <label class="font-bold text-gray-700 shrink-0">查看好友：</label>
+          <select id="view-friend-select" onchange="renderFriendFlowers()" class="w-full sm:w-60 border border-gray-300 rounded-xl p-2.5 bg-white focus:ring-2 focus:ring-pink-400 focus:outline-none"></select>
+        </div>
+        <div id="friend-stats" class="text-sm font-medium text-pink-700 bg-pink-50 px-4 py-2 rounded-xl">
+          共擁有 0 朵花
+        </div>
+      </div>
+
+      <div id="friend-flowers-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3"></div>
+    </section>
+
+  </main>
+
+  <script>
+    // ⚠️ 請將下方的網址替換為你的 Google Apps Script 網頁應用程式網址
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycby6mq08g1wyI5WPnHi9FllNk-5eIpjjgn9FUnGDWN9mctALHtXnui0hRnfW7uDoEdd4/exec';
+
+    let appData = { friends: [], flowers: [] };
+    let detectedFlowers = [];
+
+    // 初始化載入資料
+    window.onload = () => {
+      if (GAS_URL === 'YOUR_GAS_WEB_APP_URL') {
+        alert('請先在 index.html 中設定你的 GAS_URL！');
+        return;
+      }
+      fetchSheetData();
+    };
+
+    // 圖片預覽
+    document.getElementById('image-input').addEventListener('change', function(e) {
+      const file = e.target.files;
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const img = document.getElementById('image-preview');
+          img.src = ev.target.result;
+          img.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    function showLoading(text) {
+      document.getElementById('loading-text').innerText = text;
+      document.getElementById('loading').classList.remove('hidden');
+    }
+
+    function hideLoading() {
+      document.getElementById('loading').classList.add('hidden');
+    }
+
+    // 切換分頁
+    function switchTab(tabName) {
+      ['upload', 'search', 'friend'].forEach(t => {
+        document.getElementById(`view-${t}`).classList.add('hidden');
+        const btn = document.getElementById(`tab-${t}`);
+        btn.classList.remove('bg-pink-600', 'text-white');
+        btn.classList.add('text-gray-600');
+      });
+      document.getElementById(`view-${tabName}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-${tabName}`);
+      activeBtn.classList.add('bg-pink-600', 'text-white');
+      activeBtn.classList.remove('text-gray-600');
+    }
+
+    function toggleNewFriendInput() {
+      const val = document.getElementById('select-friend').value;
+      const box = document.getElementById('new-friend-box');
+      if (val === '__NEW__') box.classList.remove('hidden');
+      else box.classList.add('hidden');
+    }
+
+    // 呼叫後端 API 通用函式
+    async function callGasApi(payload) {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (json.status !== 'success') throw new Error(json.message);
+      return json.data;
+    }
+
+    // 讀取試算表資料
+    async function fetchSheetData() {
+      showLoading('正在同步試算表花冊資料...');
+try {
+appData = await callGasApi({ action: 'getData' });
+populateFriendSelects();
+renderMainTable();
+renderFriendFlowers();
+} catch (err) {
+alert('讀取資料失敗：' + err.message);
+} finally {
+hideLoading();
+}
+}
+function populateFriendSelects() {
+const sel1 = document.getElementById('select-friend');
+const sel2 = document.getElementById('view-friend-select');
+sel1.innerHTML = '-- 請選擇好友 --➕ 新增好友...';
+sel2.innerHTML = '';
+appData.friends.forEach(f => {
+sel1.innerHTML += <option value="${f}">${f}</option>;
+sel2.innerHTML += <option value="${f}">${f}</option>;
+});
+}
+// 壓縮圖片並送出辨識
+function analyzeImage() {
+const fileInput = document.getElementById('image-input');
+if (!fileInput.files.length) {
+alert('請先選擇一張圖鑑截圖！');
+return;
+}
+showLoading('AI 正在辨識截圖中的花名...');
+const file = fileInput.files;
+const reader = new FileReader();
+reader.onload = function(e) {
+const img = new Image();
+img.onload = async function() {
+// 縮放圖片避免傳輸過大逾時
+const canvas = document.createElement('canvas');
+const MAX_WIDTH = 1200;
+let width = img.width;
+let height = img.height;
+if (width > MAX_WIDTH) {
+height *= MAX_WIDTH / width;
+width = MAX_WIDTH;
+}
+canvas.width = width;
+canvas.height = height;
+const ctx = canvas.getContext('2d');
+ctx.drawImage(img, 0, 0, width, height);
+const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+const base64Data = dataUrl.split(',');
+try {
+detectedFlowers = await callGasApi({
+action: 'analyzeImage',
+imageBase64: base64Data,
+mimeType: 'image/jpeg'
+});
+renderConfirmList();
+document.getElementById('confirm-section').classList.remove('hidden');
+} catch (err) {
+alert('辨識失敗：' + err.message);
+} finally {
+hideLoading();
+}
+};
+img.src = e.target.result;
+};
+reader.readAsDataURL(file);
+}
+// 渲染確認清單
+function renderConfirmList() {
+const tbody = document.getElementById('detected-list');
+tbody.innerHTML = '';
+const existingNames = new Set(appData.flowers.map(f => f.name));
+detectedFlowers.forEach((item, idx) => {
+const isNew = !existingNames.has(item.name.trim());
+const badge = isNew
+? '✨ 新花'
+: '已知花種';
+tbody.innerHTML += `
+${badge}
+`;
+});
+}
+function updateDetectedName(idx, newName) {
+detectedFlowers[idx].name = newName.trim();
+renderConfirmList(); // 重新渲染以即時更新「新花/已知花種」標籤
+}
+function removeDetectedRow(idx) {
+detectedFlowers.splice(idx, 1);
+renderConfirmList();
+}
+function addEmptyRow() {
+detectedFlowers.push({ name: '', grade: '仙品', isNew: true });
+renderConfirmList();
+}
+// 送出更新寫入試算表
+async function submitUpdates() {
+const sel = document.getElementById('select-friend').value;
+let friendName = sel;
+let isNewFriend = false;
+if (!sel) {
+alert('請先在上方選擇一位好友！');
+return;
+}
+if (sel === 'NEW') {
+friendName = document.getElementById('input-new-friend').value.trim();
+isNewFriend = true;
+if (!friendName) {
+alert('請輸入新好友的名稱！');
+return;
+}
+}
+const validFlowers = detectedFlowers.filter(f => f.name.trim() !== '');
+if (validFlowers.length === 0) {
+alert('清單中沒有任何有效的花名！');
+return;
+}
+showLoading(正在更新「${friendName}」的總表與個人分頁...);
+try {
+const res = await callGasApi({
+action: 'updateFlowers',
+friendName: friendName,
+isNewFriend: isNewFriend,
+flowers: validFlowers
+});
+alert(res.message);
+document.getElementById('confirm-section').classList.add('hidden');
+document.getElementById('image-input').value = '';
+document.getElementById('image-preview').classList.add('hidden');
+await fetchSheetData();
+} catch (err) {
+alert('更新失敗：' + err.message);
+} finally {
+hideLoading();
+}
+}
+// 渲染總覽與搜尋表格
+function renderMainTable() {
+const keyword = document.getElementById('search-input').value.trim().toLowerCase();
+const gradeFilter = document.getElementById('filter-grade').value;
+const thead = document.getElementById('main-table-head');
+let headHtml = `
+花名
+品項
+人數
+誰有這朵花
+; appData.friends.forEach(f => { headHtml += ${f}`;
+});
+thead.innerHTML = headHtml;
+const tbody = document.getElementById('main-table-body');
+tbody.innerHTML = '';
+const filtered = appData.flowers.filter(f => {
+const matchKey = f.name.toLowerCase().includes(keyword);
+const matchGrade = gradeFilter === 'ALL' || f.grade === gradeFilter;
+return matchKey && matchGrade;
+});
+filtered.forEach(f => {
+const ownerSet = new Set(f.owners);
+const gradeBadge = f.grade === '仙品'
+? '仙品'
+: '華品';
+let rowHtml = `
+${f.name}
+${gradeBadge}
+${f.owners.length}
+${f.owners.join('、') || '-'}
+; appData.friends.forEach(friend => { const has = ownerSet.has(friend); rowHtml += ${has ? 'V' : '·'}; }); tbody.innerHTML += ${rowHtml}`;
+});
+}
+// 渲染單一好友花冊
+function renderFriendFlowers() {
+const friendName = document.getElementById('view-friend-select').value;
+const grid = document.getElementById('friend-flowers-grid');
+const stats = document.getElementById('friend-stats');
+if (!friendName) return;
+const owned = appData.flowers.filter(f => f.owners.includes(friendName));
+stats.innerText = ${friendName} 共擁有 ${owned.length} 朵花;
+grid.innerHTML = '';
+if (owned.length === 0) {
+grid.innerHTML = '目前尚未記錄任何花朵';
+return;
+}
+owned.forEach(f => {
+const borderClass = f.grade === '仙品' ? 'border-purple-200 bg-purple-50/20' : 'border-blue-200 bg-blue-50/20';
+const tagClass = f.grade === '仙品' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+grid.innerHTML += <div class="p-3.5 rounded-xl border ${borderClass} bg-white flex justify-between items-center shadow-2xs"> <span class="font-medium text-gray-800">${f.name}</span> <span class="text-xs px-2 py-0.5 rounded-md font-medium ${tagClass}">${f.grade}</span> </div>;
+});
+}
+
